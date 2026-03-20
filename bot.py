@@ -359,7 +359,15 @@ async def reset(call: types.CallbackQuery):
         "bar": []
     }
     await update_menu(call)
+@dp.message()
+async def auto_menu(msg: types.Message):
+    if msg.from_user.id not in get_admins():
+        return
 
+    await msg.answer(
+        "Главное меню:",
+        reply_markup=get_reply_kb()
+    )
 
 @dp.callback_query(lambda c: c.data == "build")
 async def build(call: types.CallbackQuery):
