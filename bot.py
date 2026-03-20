@@ -128,8 +128,8 @@ async def start(msg: types.Message):
 @dp.callback_query(lambda c: c.data == "time")
 async def time(call: types.CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="12:00–23:00", callback_data="time_1")],
-        [InlineKeyboardButton(text="14:00–02:00", callback_data="time_2")],
+        [InlineKeyboardButton(text="12:00 до 02:00", callback_data="time_1")],
+        [InlineKeyboardButton(text="12:00 до 04:00", callback_data="time_2")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")]
     ])
 
@@ -138,9 +138,9 @@ async def time(call: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data.startswith("time_"))
 async def time_select(call: types.CallbackQuery):
     if call.data == "time_1":
-        user_data[call.from_user.id]["time"] = "12:00–23:00"
+        user_data[call.from_user.id]["time"] = "12:00 до 02:00"
     elif call.data == "time_2":
-        user_data[call.from_user.id]["time"] = "14:00–02:00"
+        user_data[call.from_user.id]["time"] = "12:00 до 04:00"
 
     await update_menu(call)
 
