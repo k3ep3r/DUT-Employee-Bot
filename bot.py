@@ -21,8 +21,6 @@ bot = Bot(
 )
 
 dp = Dispatcher()
-bot = Bot(token=TOKEN, parse_mode="HTML")
-dp = Dispatcher()
 
 user_data = {}
 
