@@ -6,51 +6,24 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
-# --- НАСТРОЙКИ ---
+# --- CONFIG ---
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = "@dut_minsk_mir"  # <-- замени на свой канал
-ADMINS = [106945332]  # <-- вставь свой Telegram ID
+CHAT_ID = "@dut_minsk_mir"  # <-- замени
+ADMINS = [106945332]  # <-- вставь свой ID
 
-STAFF = ["Мотор", "Слава", "ЛилКизил", "Слуцк", "Дима", "Андрей", "Артем"]
+KM_STAFF = ["Мотор", "Вячеслав", "Никита", "Владислав"]
+BAR_STAFF = ["Андрей", "Андрей", "Дима", "Артём"]
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, parse_mode="HTML")
 dp = Dispatcher()
 
 user_data = {}
-user_state = {}
 
-# --- ПРОВЕРКА ---
+# --- ADMIN CHECK ---
 def is_admin(user_id):
     return user_id in ADMINS
 
-# --- КНОПКИ ---
-def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏰ Время", callback_data="time")],
-        [InlineKeyboardButton(text="💨 Чаша", callback_data="bowl")],
-        [InlineKeyboardButton(text="🍹 Коктейли", callback_data="cocktail")],
-        [InlineKeyboardButton(text="📄 Собрать", callback_data="build")]
-    ])
-
-def confirm_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Опубликовать", callback_data="confirm_publish")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_publish")]
-    ])
-
-def staff_kb(selected, prefix):
-    buttons = []
-    for name in STAFF:
-        mark = "✅ " if name in selected else ""
-        buttons.append([InlineKeyboardButton(
-            text=mark + name,
-            callback_data=f"{prefix}_{name}"
-        )])
-
-    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data=f"{prefix}_done")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-# --- ДАТА (без locale — работает везде) ---
+# --- DATE ---
 def get_date():
     now = datetime.now()
 
@@ -79,80 +52,118 @@ def get_date():
         "December": "декабря"
     }
 
-    day = days[now.strftime("%A")]
-    month = months[now.strftime("%B")]
+    return f"Сегодня {now.day} {months[now.strftime('%B')]}, {days[now.strftime('%A')]} 🌸"
 
-    return f"Сегодня {now.day} {month}, {day} 🌸"
-
-# --- СБОРКА ПОСТА ---
+# --- POST ---
 def build_post(data):
     return f"""
-{get_date()}
+<b>{get_date()}</b>
 
-Работаем с {data.get("time", "??")}
+<b>Работаем с {data.get("time" до "??")}</b>
 
 Сегодня на смене😍
 
-Забьют самую сочную и яркую чашу:
-{", ".join(data.get("bowl", []))}
+💨 <b>Забьют самую сочную и яркую чашу:</b>
+{", ".join(data.get("km", []))}
 
-Удивят неповторимыми коктейлями:
-{", ".join(data.get("cocktail", []))}
+🍹 <b>Удивят неповторимыми, авторскими, коктейлями:</b>
+{", ".join(data.get("bar", []))}
 
 Для бронирования столов можете написать нам в личные сообщения:
-https://t.me/DUT_MINSK_MIR
-
+📩 https://t.me/DUT_MINSK_MIR
 Или набрать по номеру телефона:
-+375-29-134-06-06
-
-Будем рады вас видеть по адресу: Братская 6А❤️
+📞 +375-29-134-06-06
+Будем рады вас видеть по адресу:
+📍 Братская 6А ❤️
 """
+
+# --- MAIN UI ---
+def get_main_text(user_id):
+    data = user_data.get(user_id, {})
+
+    return (
+        f"⏰ Время: {data.get('time', 'не выбрано')}\n"
+        f"💨 КМ: {', '.join(data.get('km', [])) or '—'}\n"
+        f"🍹 Бар: {', '.join(data.get('bar', [])) or '—'}"
+    )
+
+def get_main_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏰ Время", callback_data="time")],
+        [InlineKeyboardButton(text="💨 КМ", callback_data="km")],
+        [InlineKeyboardButton(text="🍹 Бар", callback_data="bar")],
+        [InlineKeyboardButton(text="📄 Собрать", callback_data="build")],
+        [InlineKeyboardButton(text="🔄 Сброс", callback_data="reset")]
+    ])
+
+async def update_menu(call):
+    await call.message.edit_text(
+        get_main_text(call.from_user.id),
+        reply_markup=get_main_kb()
+    )
 
 # --- START ---
 @dp.message(Command("start"))
 async def start(msg: types.Message):
     if not is_admin(msg.from_user.id):
-        await msg.answer("Нет доступа ❌")
-        return
+        return await msg.answer("Нет доступа ❌")
 
     user_data[msg.from_user.id] = {
-        "bowl": [],
-        "cocktail": []
+        "time": None,
+        "km": [],
+        "bar": []
     }
 
-    await msg.answer("Настрой пост 👇", reply_markup=main_menu())
+    await msg.answer(
+        get_main_text(msg.from_user.id),
+        reply_markup=get_main_kb()
+    )
 
-# --- ВРЕМЯ ---
+# --- TIME ---
 @dp.callback_query(lambda c: c.data == "time")
 async def time(call: types.CallbackQuery):
-    user_state[call.from_user.id] = "time"
-    await call.message.answer("Введи время (пример: 12:00-23:00)")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="12:00–23:00", callback_data="time_1")],
+        [InlineKeyboardButton(text="14:00–02:00", callback_data="time_2")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")]
+    ])
 
-@dp.message()
-async def input_handler(msg: types.Message):
-    if not is_admin(msg.from_user.id):
-        return
+    await call.message.edit_text("Выбери время:", reply_markup=kb)
 
-    if user_state.get(msg.from_user.id) == "time":
-        user_data[msg.from_user.id]["time"] = msg.text
-        await msg.answer("Сохранил ✅", reply_markup=main_menu())
+@dp.callback_query(lambda c: c.data.startswith("time_"))
+async def time_select(call: types.CallbackQuery):
+    if call.data == "time_1":
+        user_data[call.from_user.id]["time"] = "12:00–23:00"
+    elif call.data == "time_2":
+        user_data[call.from_user.id]["time"] = "14:00–02:00"
 
-# --- ЧАША ---
-@dp.callback_query(lambda c: c.data == "bowl")
-async def bowl(call: types.CallbackQuery):
-    selected = user_data[call.from_user.id]["bowl"]
-    await call.message.answer("Кто делает чашу?",
-                              reply_markup=staff_kb(selected, "bowl"))
+    await update_menu(call)
 
-@dp.callback_query(lambda c: c.data.startswith("bowl_"))
-async def bowl_select(call: types.CallbackQuery):
+# --- STAFF KB ---
+def staff_kb(staff_list, selected, prefix):
+    buttons = []
+
+    for name in staff_list:
+        mark = "✅ " if name in selected else ""
+        buttons.append([
+            InlineKeyboardButton(text=mark + name, callback_data=f"{prefix}_{name}")
+        ])
+
+    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data="back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# --- KM ---
+@dp.callback_query(lambda c: c.data == "km")
+async def km(call: types.CallbackQuery):
+    await call.message.edit_text(
+        "Выбери КМ:",
+        reply_markup=staff_kb(KM_STAFF, user_data[call.from_user.id]["km"], "km")
+    )
+
+@dp.callback_query(lambda c: c.data.startswith("km_"))
+async def km_select(call: types.CallbackQuery):
     name = call.data.split("_")[1]
-
-    if name == "done":
-        await call.message.answer("Сохранил ✅", reply_markup=main_menu())
-        return
-
-    selected = user_data[call.from_user.id]["bowl"]
+    selected = user_data[call.from_user.id]["km"]
 
     if name in selected:
         selected.remove(name)
@@ -160,24 +171,22 @@ async def bowl_select(call: types.CallbackQuery):
         if len(selected) < 3:
             selected.append(name)
 
-    await call.message.edit_reply_markup(reply_markup=staff_kb(selected, "bowl"))
+    await call.message.edit_reply_markup(
+        reply_markup=staff_kb(KM_STAFF, selected, "km")
+    )
 
-# --- КОКТЕЙЛИ ---
-@dp.callback_query(lambda c: c.data == "cocktail")
-async def cocktail(call: types.CallbackQuery):
-    selected = user_data[call.from_user.id]["cocktail"]
-    await call.message.answer("Кто делает коктейли?",
-                              reply_markup=staff_kb(selected, "cocktail"))
+# --- BAR ---
+@dp.callback_query(lambda c: c.data == "bar")
+async def bar(call: types.CallbackQuery):
+    await call.message.edit_text(
+        "Выбери Бар:",
+        reply_markup=staff_kb(BAR_STAFF, user_data[call.from_user.id]["bar"], "bar")
+    )
 
-@dp.callback_query(lambda c: c.data.startswith("cocktail_"))
-async def cocktail_select(call: types.CallbackQuery):
+@dp.callback_query(lambda c: c.data.startswith("bar_"))
+async def bar_select(call: types.CallbackQuery):
     name = call.data.split("_")[1]
-
-    if name == "done":
-        await call.message.answer("Сохранил ✅", reply_markup=main_menu())
-        return
-
-    selected = user_data[call.from_user.id]["cocktail"]
+    selected = user_data[call.from_user.id]["bar"]
 
     if name in selected:
         selected.remove(name)
@@ -185,37 +194,42 @@ async def cocktail_select(call: types.CallbackQuery):
         if len(selected) < 3:
             selected.append(name)
 
-    await call.message.edit_reply_markup(reply_markup=staff_kb(selected, "cocktail"))
+    await call.message.edit_reply_markup(
+        reply_markup=staff_kb(BAR_STAFF, selected, "bar")
+    )
 
-# --- ПРЕВЬЮ ---
+# --- BACK ---
+@dp.callback_query(lambda c: c.data == "back")
+async def back(call: types.CallbackQuery):
+    await update_menu(call)
+
+# --- RESET ---
+@dp.callback_query(lambda c: c.data == "reset")
+async def reset(call: types.CallbackQuery):
+    user_data[call.from_user.id] = {
+        "time": None,
+        "km": [],
+        "bar": []
+    }
+    await update_menu(call)
+
+# --- BUILD ---
 @dp.callback_query(lambda c: c.data == "build")
 async def build(call: types.CallbackQuery):
     data = user_data[call.from_user.id]
+
+    if not data.get("time"):
+        return await call.answer("Выбери время ❌", show_alert=True)
+
     post = build_post(data)
 
-    user_data[call.from_user.id]["preview"] = post
-
-    await call.message.answer("Вот пост 👇")
-    await call.message.answer(post, reply_markup=confirm_kb())
-
-# --- ПУБЛИКАЦИЯ ---
-@dp.callback_query(lambda c: c.data == "confirm_publish")
-async def confirm_publish(call: types.CallbackQuery):
-    post = user_data[call.from_user.id].get("preview")
-
-    if not post:
-        await call.message.answer("Сначала собери пост ❌")
-        return
+    await call.message.answer("Пост 👇")
+    await call.message.answer(post)
 
     await bot.send_message(chat_id=CHAT_ID, text=post)
     await call.message.answer("Опубликовано ✅🔥")
 
-# --- ОТМЕНА ---
-@dp.callback_query(lambda c: c.data == "cancel_publish")
-async def cancel_publish(call: types.CallbackQuery):
-    await call.message.answer("Отменено ❌", reply_markup=main_menu())
-
-# --- ЗАПУСК (FIX CONFLICT) ---
+# --- START BOT ---
 async def main():
     print("RESET WEBHOOK...")
     await bot.delete_webhook(drop_pending_updates=True)
