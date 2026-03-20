@@ -59,7 +59,7 @@ def build_post(data):
     return f"""
 <b>{get_date()}</b>
 
-<b>Работаем с {data.get("time" до "??")}</b>
+<b>Работаем с {data.get("time", "??")}</b>
 
 Сегодня на смене😍
 
