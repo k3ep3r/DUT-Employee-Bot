@@ -1,32 +1,57 @@
 import asyncio
 import os
+import sqlite3
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIG ---
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@dut_minsk_mir"  # <-- замени
-ADMINS = [106945332]  # <-- вставь свой ID
+SUPER_ADMIN = 106945332  # <-- твой ID
 
-KM_STAFF = ["Мотор", "Вячеслав", "Никита", "Владислав"]
-BAR_STAFF = ["Андрей", "Андрей", "Дима", "Артём"]
+KM_STAFF = ["Мотор 🏍", "Вячеслав", "Никита", "Владислав"]
+BAR_STAFF = ["Андрей 🥷", "Андрей", "Дмитрий", "Артём"]
 
 bot = Bot(
     token=TOKEN,
     default=DefaultBotProperties(parse_mode="HTML")
 )
-
 dp = Dispatcher()
 
 user_data = {}
 
-# --- ADMIN CHECK ---
+# --- DATABASE ---
+conn = sqlite3.connect("bot.db")
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS admins (
+    user_id INTEGER PRIMARY KEY
+)
+""")
+conn.commit()
+
+def add_admin_db(user_id):
+    cursor.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
+    conn.commit()
+
+def remove_admin_db(user_id):
+    cursor.execute("DELETE FROM admins WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+def get_admins():
+    cursor.execute("SELECT user_id FROM admins")
+    return set(i[0] for i in cursor.fetchall())
+
+# добавляем главного
+add_admin_db(SUPER_ADMIN)
+
 def is_admin(user_id):
-    return user_id in ADMINS
+    return user_id in get_admins()
 
 # --- DATE ---
 def get_date():
@@ -79,10 +104,10 @@ def build_post(data):
 Или набрать по номеру телефона:
 📞 +375-29-134-06-06
 Будем рады вас видеть по адресу:
-📍 Братская 6А ❤️
+<b>📍 Братская 6А❤️</b>
 """
 
-# --- MAIN UI ---
+# --- UI ---
 def get_main_text(user_id):
     data = user_data.get(user_id, {})
 
@@ -144,7 +169,7 @@ async def time_select(call: types.CallbackQuery):
 
     await update_menu(call)
 
-# --- STAFF KB ---
+# --- STAFF ---
 def staff_kb(staff_list, selected, prefix):
     buttons = []
 
@@ -234,7 +259,49 @@ async def build(call: types.CallbackQuery):
     await bot.send_message(chat_id=CHAT_ID, text=post)
     await call.message.answer("Опубликовано ✅🔥")
 
-# --- START BOT ---
+# --- ADMIN COMMANDS ---
+@dp.message(Command("add_admin"))
+async def add_admin(msg: types.Message, command: CommandObject):
+    if msg.from_user.id != SUPER_ADMIN:
+        return await msg.answer("Нет доступа ❌")
+
+    try:
+        new_admin = int(command.args)
+        add_admin_db(new_admin)
+        await msg.answer(f"✅ Добавлен: {new_admin}")
+    except:
+        await msg.answer("Используй: /add_admin 123456789")
+
+@dp.message(Command("remove_admin"))
+async def remove_admin(msg: types.Message, command: CommandObject):
+    if msg.from_user.id != SUPER_ADMIN:
+        return await msg.answer("Нет доступа ❌")
+
+    try:
+        admin_id = int(command.args)
+
+        if admin_id == SUPER_ADMIN:
+            return await msg.answer("Нельзя удалить главного ❌")
+
+        remove_admin_db(admin_id)
+        await msg.answer(f"❌ Удален: {admin_id}")
+    except:
+        await msg.answer("Используй: /remove_admin 123456789")
+
+@dp.message(Command("admins"))
+async def admins(msg: types.Message):
+    if not is_admin(msg.from_user.id):
+        return
+
+    admins_list = get_admins()
+    text = "👥 Админы:\n\n"
+
+    for a in admins_list:
+        text += f"• {a}\n"
+
+    await msg.answer(text)
+
+# --- RUN ---
 async def main():
     print("RESET WEBHOOK...")
     await bot.delete_webhook(drop_pending_updates=True)
