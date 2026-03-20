@@ -1,13 +1,56 @@
 import asyncio
 import os
 from datetime import datetime
-import locale
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
 # --- НАСТРОЙКИ ---
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = "@dut_minsk_mir"  # <-- замени на свой канал
+ADMINS = [106945332]  # <-- вставь свой Telegram ID
+
+STAFF = ["Мотор", "Слава", "ЛилКизил", "Слуцк", "Дима", "Андрей", "Артем"]
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+user_data = {}
+user_state = {}
+
+# --- ПРОВЕРКА ---
+def is_admin(user_id):
+    return user_id in ADMINS
+
+# --- КНОПКИ ---
+def main_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏰ Время", callback_data="time")],
+        [InlineKeyboardButton(text="💨 Чаша", callback_data="bowl")],
+        [InlineKeyboardButton(text="🍹 Коктейли", callback_data="cocktail")],
+        [InlineKeyboardButton(text="📄 Собрать", callback_data="build")]
+    ])
+
+def confirm_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Опубликовать", callback_data="confirm_publish")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_publish")]
+    ])
+
+def staff_kb(selected, prefix):
+    buttons = []
+    for name in STAFF:
+        mark = "✅ " if name in selected else ""
+        buttons.append([InlineKeyboardButton(
+            text=mark + name,
+            callback_data=f"{prefix}_{name}"
+        )])
+
+    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data=f"{prefix}_done")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# --- ДАТА (без locale — работает везде) ---
 def get_date():
     now = datetime.now()
 
@@ -40,53 +83,6 @@ def get_date():
     month = months[now.strftime("%B")]
 
     return f"Сегодня {now.day} {month}, {day} 🌸"
-TOKEN = os.getenv("TOKEN")
-CHAT_ID = "@dut_minsk_mir"  # <-- замени на свой канал
-ADMINS = [106945332]  # <-- вставь свой Telegram ID
-
-STAFF = ["Мотор", "Слава", "Никита", "хз", "Андрей", "Дима", "Артем"]
-
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-
-user_data = {}
-user_state = {}
-
-# --- ПРОВЕРКА АДМИНА ---
-def is_admin(user_id):
-    return user_id in ADMINS
-
-# --- КНОПКИ ---
-def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏰ Время", callback_data="time")],
-        [InlineKeyboardButton(text="💨 КМ", callback_data="bowl")],
-        [InlineKeyboardButton(text="🍹 Коктейли", callback_data="cocktail")],
-        [InlineKeyboardButton(text="📄 Собрать", callback_data="build")]
-    ])
-
-def confirm_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Опубликовать", callback_data="confirm_publish")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_publish")]
-    ])
-
-def staff_kb(selected, prefix):
-    buttons = []
-    for name in STAFF:
-        mark = "✅ " if name in selected else ""
-        buttons.append([InlineKeyboardButton(
-            text=mark + name,
-            callback_data=f"{prefix}_{name}"
-        )])
-
-    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data=f"{prefix}_done")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-# --- ДАТА ---
-def get_date():
-    now = datetime.now()
-    return now.strftime("Сегодня %d %B, %A 🌸")
 
 # --- СБОРКА ПОСТА ---
 def build_post(data):
@@ -219,8 +215,12 @@ async def confirm_publish(call: types.CallbackQuery):
 async def cancel_publish(call: types.CallbackQuery):
     await call.message.answer("Отменено ❌", reply_markup=main_menu())
 
-# --- ЗАПУСК ---
+# --- ЗАПУСК (FIX CONFLICT) ---
 async def main():
+    print("RESET WEBHOOK...")
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    print("START POLLING...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
