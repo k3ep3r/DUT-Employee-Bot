@@ -8,8 +8,38 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
 # --- НАСТРОЙКИ ---
-locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+def get_date():
+    now = datetime.now()
 
+    days = {
+        "Monday": "понедельник",
+        "Tuesday": "вторник",
+        "Wednesday": "среда",
+        "Thursday": "четверг",
+        "Friday": "пятница",
+        "Saturday": "суббота",
+        "Sunday": "воскресенье"
+    }
+
+    months = {
+        "January": "января",
+        "February": "февраля",
+        "March": "марта",
+        "April": "апреля",
+        "May": "мая",
+        "June": "июня",
+        "July": "июля",
+        "August": "августа",
+        "September": "сентября",
+        "October": "октября",
+        "November": "ноября",
+        "December": "декабря"
+    }
+
+    day = days[now.strftime("%A")]
+    month = months[now.strftime("%B")]
+
+    return f"Сегодня {now.day} {month}, {day} 🌸"
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@dut_minsk_mir"  # <-- замени на свой канал
 ADMINS = [106945332]  # <-- вставь свой Telegram ID
