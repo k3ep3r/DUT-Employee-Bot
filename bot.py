@@ -1,19 +1,18 @@
 import asyncio
 import os
-import sqlite3
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIG ---
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = "@dut_minsk_mir"  # <-- замени
+CHAT_ID = "@dut_minsk_mir"
 SUPER_ADMIN = 106945332  # <-- твой ID
 
-KM_STAFF = ["Дмиткий 🏍", "Вячеслав  🤙🏽", "Никита", "Владислав"]
+KM_STAFF = ["Дмитрий 🏍", "Вячеслав  🤙🏽", "Никита", "Владислав"]
 BAR_STAFF = ["Андрей 🥷", "Андрей", "Дмитрий 🍰", "Артём 🍹"]
 
 bot = Bot(
@@ -23,38 +22,25 @@ bot = Bot(
         link_preview_is_disabled=True
     )
 )
+
 dp = Dispatcher()
 
 user_data = {}
+users = set()  # <-- все пользователи
+pending_admin = {}
 
-# --- DATABASE ---
-conn = sqlite3.connect("bot.db")
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS admins (
-    user_id INTEGER PRIMARY KEY
-)
-""")
-conn.commit()
-
-def add_admin_db(user_id):
-    cursor.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
-    conn.commit()
-
-def remove_admin_db(user_id):
-    cursor.execute("DELETE FROM admins WHERE user_id = ?", (user_id,))
-    conn.commit()
-
+# --- ADMINS (Railway) ---
 def get_admins():
-    cursor.execute("SELECT user_id FROM admins")
-    return set(i[0] for i in cursor.fetchall())
+    raw = os.getenv("ADMINS", "")
+    return set(int(x) for x in raw.split(",") if x)
 
-# добавляем главного
-add_admin_db(SUPER_ADMIN)
+
+def save_admins(admins):
+    return ",".join(map(str, admins))
+
 
 def is_admin(user_id):
-    return user_id in get_admins()
+    return user_id in get_admins() or user_id == SUPER_ADMIN
 
 # --- DATE ---
 def get_date():
@@ -99,15 +85,13 @@ def build_post(data):
 💨 <b>Забьют самую сочную и яркую чашу:</b>
 {", ".join(data.get("km", []))}
 
-🍹 <b>Удивят неповторимыми, авторскими, коктейлями:</b>
+🍹 <b>Удивят неповторимыми коктейлями:</b>
 {", ".join(data.get("bar", []))}
 
-Для бронирования столов можете написать нам в личные сообщения:
 📩 https://t.me/DUT_MINSK_MIR
-Или набрать по номеру телефона:
 📞 +375-29-134-06-06
-Будем рады вас видеть по адресу:
-<b>📍 Братская 6А❤️</b>
+
+📍 Братская 6А❤️
 """
 
 # --- UI ---
@@ -120,14 +104,60 @@ def get_main_text(user_id):
         f"🍹 Бар: {', '.join(data.get('bar', [])) or '—'}"
     )
 
+
 def get_main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏰ Время", callback_data="time")],
-        [InlineKeyboardButton(text="💨 КМ", callback_data="km")],
-        [InlineKeyboardButton(text="🍹 Бар", callback_data="bar")],
-        [InlineKeyboardButton(text="📄 Собрать", callback_data="build")],
+        [
+            InlineKeyboardButton(text="💨 КМ", callback_data="km"),
+            InlineKeyboardButton(text="🍹 Бар", callback_data="bar")
+        ],
+        [InlineKeyboardButton(text="📄 Сделать пост", callback_data="build")],
+        [InlineKeyboardButton(text="👑 Админы", callback_data="admin_menu")],
         [InlineKeyboardButton(text="🔄 Сброс", callback_data="reset")]
     ])
+
+
+def get_admin_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Добавить", callback_data="add_admin_ui")],
+        [InlineKeyboardButton(text="➖ Удалить", callback_data="remove_admin_ui")],
+        [InlineKeyboardButton(text="👥 Список", callback_data="list_admins")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")]
+    ])
+
+
+def staff_kb(staff_list, selected, prefix):
+    buttons = []
+
+    for name in staff_list:
+        mark = "✅ " if name in selected else ""
+        buttons.append([
+            InlineKeyboardButton(text=mark + name, callback_data=f"{prefix}_{name}")
+        ])
+
+    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data="back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_select_kb(current_admins, mode):
+    buttons = []
+
+    for user_id in users:
+        mark = "✅ " if user_id in current_admins else ""
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{mark}{user_id}",
+                callback_data=f"{mode}_{user_id}"
+            )
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(text="✔️ Готово", callback_data="admin_done")
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 async def update_menu(call):
     await call.message.edit_text(
@@ -138,6 +168,8 @@ async def update_menu(call):
 # --- START ---
 @dp.message(Command("start"))
 async def start(msg: types.Message):
+    users.add(msg.from_user.id)
+
     if not is_admin(msg.from_user.id):
         return await msg.answer("Нет доступа ❌")
 
@@ -163,27 +195,15 @@ async def time(call: types.CallbackQuery):
 
     await call.message.edit_text("Выбери время:", reply_markup=kb)
 
+
 @dp.callback_query(lambda c: c.data.startswith("time_"))
 async def time_select(call: types.CallbackQuery):
     if call.data == "time_1":
         user_data[call.from_user.id]["time"] = "12:00 до 02:00"
     elif call.data == "time_2":
-        user_data[call.from_user.id]["time"] = "12:00 до 04:00"
+        user_data[call.from_user.id]["time"] = "12:00 до 04:00""
 
     await update_menu(call)
-
-# --- STAFF ---
-def staff_kb(staff_list, selected, prefix):
-    buttons = []
-
-    for name in staff_list:
-        mark = "✅ " if name in selected else ""
-        buttons.append([
-            InlineKeyboardButton(text=mark + name, callback_data=f"{prefix}_{name}")
-        ])
-
-    buttons.append([InlineKeyboardButton(text="✔️ Готово", callback_data="back")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # --- KM ---
 @dp.callback_query(lambda c: c.data == "km")
@@ -192,6 +212,7 @@ async def km(call: types.CallbackQuery):
         "Выбери КМ:",
         reply_markup=staff_kb(KM_STAFF, user_data[call.from_user.id]["km"], "km")
     )
+
 
 @dp.callback_query(lambda c: c.data.startswith("km_"))
 async def km_select(call: types.CallbackQuery):
@@ -216,6 +237,7 @@ async def bar(call: types.CallbackQuery):
         reply_markup=staff_kb(BAR_STAFF, user_data[call.from_user.id]["bar"], "bar")
     )
 
+
 @dp.callback_query(lambda c: c.data.startswith("bar_"))
 async def bar_select(call: types.CallbackQuery):
     name = call.data.split("_")[1]
@@ -231,12 +253,102 @@ async def bar_select(call: types.CallbackQuery):
         reply_markup=staff_kb(BAR_STAFF, selected, "bar")
     )
 
-# --- BACK ---
+# --- ADMIN UI ---
+@dp.callback_query(lambda c: c.data == "admin_menu")
+async def admin_menu(call: types.CallbackQuery):
+    if call.from_user.id != SUPER_ADMIN:
+        return await call.answer("Нет доступа ❌", show_alert=True)
+
+    await call.message.edit_text(
+        "👑 Управление администраторами:",
+        reply_markup=get_admin_kb()
+    )
+
+
+@dp.callback_query(lambda c: c.data == "add_admin_ui")
+async def add_admin_ui(call: types.CallbackQuery):
+    admins = get_admins()
+
+    await call.message.edit_text(
+        "➕ Выбери админов:",
+        reply_markup=admin_select_kb(admins, "addadmin")
+    )
+
+
+@dp.callback_query(lambda c: c.data == "remove_admin_ui")
+async def remove_admin_ui(call: types.CallbackQuery):
+    admins = get_admins()
+
+    await call.message.edit_text(
+        "➖ Убери админов:",
+        reply_markup=admin_select_kb(admins, "deladmin")
+    )
+
+
+@dp.callback_query(lambda c: c.data.startswith("addadmin_"))
+async def add_admin_click(call: types.CallbackQuery):
+    user_id = int(call.data.split("_")[1])
+    admins = get_admins()
+
+    admins.add(user_id)
+    new_value = save_admins(admins)
+
+    await call.answer("Добавлен ✅")
+
+    await call.message.edit_reply_markup(
+        reply_markup=admin_select_kb(admins, "addadmin")
+    )
+
+    print("ADMINS =", new_value)
+
+
+@dp.callback_query(lambda c: c.data.startswith("deladmin_"))
+async def del_admin_click(call: types.CallbackQuery):
+    user_id = int(call.data.split("_")[1])
+    admins = get_admins()
+
+    if user_id == SUPER_ADMIN:
+        return await call.answer("Нельзя ❌", show_alert=True)
+
+    admins.discard(user_id)
+    new_value = save_admins(admins)
+
+    await call.answer("Удален ❌")
+
+    await call.message.edit_reply_markup(
+        reply_markup=admin_select_kb(admins, "deladmin")
+    )
+
+    print("ADMINS =", new_value)
+
+
+@dp.callback_query(lambda c: c.data == "admin_done")
+async def admin_done(call: types.CallbackQuery):
+    admins = get_admins()
+
+    await call.message.edit_text(
+        "Скопируй и вставь в Railway:\n\n"
+        f"<code>{','.join(map(str, admins))}</code>",
+        reply_markup=get_admin_kb()
+    )
+
+
+@dp.callback_query(lambda c: c.data == "list_admins")
+async def list_admins(call: types.CallbackQuery):
+    admins = get_admins()
+
+    text = "👥 Админы:\n\n"
+    for a in admins:
+        text += f"• {a}\n"
+
+    await call.message.edit_text(text, reply_markup=get_admin_kb())
+
+# --- COMMON ---
 @dp.callback_query(lambda c: c.data == "back")
 async def back(call: types.CallbackQuery):
     await update_menu(call)
 
-# --- RESET ---
+
 @dp.callback_query(lambda c: c.data == "reset")
 async def reset(call: types.CallbackQuery):
     user_data[call.from_user.id] = {
@@ -246,7 +358,7 @@ async def reset(call: types.CallbackQuery):
     }
     await update_menu(call)
 
-# --- BUILD ---
+
 @dp.callback_query(lambda c: c.data == "build")
 async def build(call: types.CallbackQuery):
     data = user_data[call.from_user.id]
@@ -261,48 +373,6 @@ async def build(call: types.CallbackQuery):
 
     await bot.send_message(chat_id=CHAT_ID, text=post)
     await call.message.answer("Опубликовано ✅🔥")
-
-# --- ADMIN COMMANDS ---
-@dp.message(Command("add_admin"))
-async def add_admin(msg: types.Message, command: CommandObject):
-    if msg.from_user.id != SUPER_ADMIN:
-        return await msg.answer("Нет доступа ❌")
-
-    try:
-        new_admin = int(command.args)
-        add_admin_db(new_admin)
-        await msg.answer(f"✅ Добавлен: {new_admin}")
-    except:
-        await msg.answer("Используй: /add_admin 123456789")
-
-@dp.message(Command("remove_admin"))
-async def remove_admin(msg: types.Message, command: CommandObject):
-    if msg.from_user.id != SUPER_ADMIN:
-        return await msg.answer("Нет доступа ❌")
-
-    try:
-        admin_id = int(command.args)
-
-        if admin_id == SUPER_ADMIN:
-            return await msg.answer("Нельзя удалить главного ❌")
-
-        remove_admin_db(admin_id)
-        await msg.answer(f"❌ Удален: {admin_id}")
-    except:
-        await msg.answer("Используй: /remove_admin 123456789")
-
-@dp.message(Command("admins"))
-async def admins(msg: types.Message):
-    if not is_admin(msg.from_user.id):
-        return
-
-    admins_list = get_admins()
-    text = "👥 Админы:\n\n"
-
-    for a in admins_list:
-        text += f"• {a}\n"
-
-    await msg.answer(text)
 
 # --- RUN ---
 async def main():
