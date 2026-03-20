@@ -5,6 +5,7 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIG ---
 TOKEN = os.getenv("TOKEN")
@@ -14,6 +15,12 @@ ADMINS = [106945332]  # <-- вставь свой ID
 KM_STAFF = ["Мотор", "Вячеслав", "Никита", "Владислав"]
 BAR_STAFF = ["Андрей", "Андрей", "Дима", "Артём"]
 
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML")
+)
+
+dp = Dispatcher()
 bot = Bot(token=TOKEN, parse_mode="HTML")
 dp = Dispatcher()
 
