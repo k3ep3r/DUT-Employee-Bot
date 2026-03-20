@@ -201,7 +201,7 @@ async def time_select(call: types.CallbackQuery):
     if call.data == "time_1":
         user_data[call.from_user.id]["time"] = "12:00 до 02:00"
     elif call.data == "time_2":
-        user_data[call.from_user.id]["time"] = "12:00 до 04:00""
+        user_data[call.from_user.id]["time"] = "12:00 до 04:00"
 
     await update_menu(call)
 
