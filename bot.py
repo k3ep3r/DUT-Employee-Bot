@@ -13,12 +13,15 @@ TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@dut_minsk_mir"  # <-- замени
 SUPER_ADMIN = 106945332  # <-- твой ID
 
-KM_STAFF = ["Мотор 🏍", "Вячеслав", "Никита", "Владислав"]
-BAR_STAFF = ["Андрей 🥷", "Андрей", "Дмитрий", "Артём"]
+KM_STAFF = ["Дмиткий 🏍", "Вячеслав", "Никита", "Владислав 🤙🏽"]
+BAR_STAFF = ["Андрей 🥷", "Андрей", "Дмитрий 🍰", "Артём 🍹"]
 
 bot = Bot(
     token=TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
+    default=DefaultBotProperties(
+        parse_mode="HTML",
+        link_preview_is_disabled=True
+    )
 )
 dp = Dispatcher()
 
