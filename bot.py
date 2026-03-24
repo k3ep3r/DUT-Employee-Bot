@@ -77,11 +77,8 @@ def get_date():
 def build_post(data):
     return f"""
 <b>{get_date()}</b>
-
 <b>Работаем с {data.get("time", "??")}</b>
-
 Сегодня на смене😍
-
 💨 <b>Забьют самую сочную и яркую чашу:</b>
 {", ".join(data.get("km", []))}
 
